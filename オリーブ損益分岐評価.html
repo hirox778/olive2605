@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>カード別 損益分岐シミュレーション（完全版）</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <div class="mb-6 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h1 class="text-2xl md:text-3xl font-bold mb-4">💳 カード別 損益分岐シミュレーション</h1>
+            
+            <div class="flex flex-col md:flex-row md:items-center gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+                <label for="assetTier" class="font-bold text-blue-900 whitespace-nowrap">🏦 預入資産額を選択：</label>
+                <select id="assetTier" onchange="updateAllCharts()" class="w-full md:w-auto px-4 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 text-lg font-medium">
+                    <option value="0">3,000万円未満 (Olive積立特典なし / PP年会費あり)</option>
+                    <option value="1" selected>3,000万〜5,000万円未満 (Olive積立特典+1% / Olive PP年会費無料)</option>
+                    <option value="2">5,000万円以上 (Olive積立特典+2% / Infinite＆Olive PP年会費無料)</option>
+                </select>
+            </div>
+
+            <p class="text-sm text-gray-600">
+                <strong>積立条件：</strong>クレカ積立 月額10万円（年間120万円）フル活用<br>
+                <span class="text-xs text-gray-500">※本シミュレーションは、2026年5月時点の公式情報を元に作成しています。最新の還元率や条件については、必ず三井住友カードの公式サイトをご確認ください。</span><br>
+                <span class="text-xs text-gray-500">※当ツールは個人が作成した非公式のシミュレーターです。</span><br>
+                <span class="text-xs text-gray-500">※計算結果は目安であり、実際の付与ポイントや損益を保証するものではありません。カードの入会や資産運用は自己責任でご判断ください。</span><br>
+            </p>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- グラフ1: 現行非Olive PP -->
+            <div class="bg-white p-4 rounded-xl shadow-md h-96 border-t-4 border-blue-600">
+                <canvas id="chart1"></canvas>
+            </div>
+            
+            <!-- グラフ2: Olive PP -->
+            <div class="bg-white p-4 rounded-xl shadow-md h-96 border-t-4 border-orange-600">
+                <canvas id="chart2"></canvas>
+            </div>
+            
+            <!-- グラフ3: Olive Infinite -->
+            <div class="bg-white p-4 rounded-xl shadow-md h-96 border-t-4 border-gray-800">
+                <canvas id="chart3"></canvas>
+            </div>
+            
+            <!-- グラフ4: 損益比較 -->
+            <div class="bg-white p-4 rounded-xl shadow-md h-96 border-2 border-indigo-200">
+                <canvas id="chart4"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- データ計算ロジック ---
+        function calculateData(tier) {
+            const usages = [0, 100, 200, 300, 400, 500, 600, 700];
+            const res = { pp: { burden: [], pt: [], profit: [], tooltipText: [] }, 
+                          opp: { burden: [], pt: [], profit: [], tooltipText: [] }, 
+                          inf: { burden: [], pt: [], profit: [], tooltipText: [] } };
+
+            usages.forEach(u => {
+                // フォーマット用ヘルパー関数
+                const formatSign = (num) => (num > 0 ? '+' : '') + num.toLocaleString();
+
+                // 1. 現行非Olive PP
+                const c_pp = 33000;
+                const pb_pp = u * 100;
+                const pbo_pp = u >= 400 ? 40000 : (u >= 300 ? 30000 : (u >= 200 ? 20000 : (u >= 100 ? 10000 : 0)));
+                const rate_pp = u >= 500 ? 0.03 : (u >= 300 ? 0.02 : 0.01);
+                const pt_pp = Math.floor(1200000 * rate_pp);
+                const p_pp = pb_pp + pbo_pp + pt_pp;
+                const net_pp = p_pp - c_pp;
+                res.pp.burden.push(-c_pp);
+                res.pp.pt.push(p_pp);
+                res.pp.profit.push(net_pp);
+                res.pp.tooltipText.push([
+                    `負担額: ${c_pp.toLocaleString()} 円`,
+                    `Pt付与: ${p_pp.toLocaleString()} Pt`,
+                    `├ ｼｮｯﾋﾟﾝｸﾞ: ${pb_pp.toLocaleString()}`,
+                    `├ 継続特典: ${pbo_pp.toLocaleString()}`,
+                    `└ 積立還元: ${pt_pp.toLocaleString()} (${(rate_pp*100).toFixed(1).replace('.0','')}%)`,
+                    `差引: ${formatSign(net_pp)} 円`
+                ]);
+
+                // 2. Olive PP
+                const c_opp = tier >= 1 ? 0 : 33000;
+                const pb_opp = u * 100;
+                const pbo_opp = pbo_pp;
+                const bonus_opp = tier === 2 ? 0.02 : (tier === 1 ? 0.01 : 0);
+                const rate_opp = rate_pp + bonus_opp;
+                const pt_opp = Math.floor(1200000 * rate_opp);
+                const p_opp = pb_opp + pbo_opp + pt_opp;
+                const net_opp = p_opp - c_opp;
+                res.opp.burden.push(-c_opp);
+                res.opp.pt.push(p_opp);
+                res.opp.profit.push(net_opp);
+                res.opp.tooltipText.push([
+                    `負担額: ${c_opp.toLocaleString()} 円`,
+                    `Pt付与: ${p_opp.toLocaleString()} Pt`,
+                    `├ ｼｮｯﾋﾟﾝｸﾞ: ${pb_opp.toLocaleString()}`,
+                    `├ 継続特典: ${pbo_opp.toLocaleString()}`,
+                    `└ 積立還元: ${pt_opp.toLocaleString()} (${(rate_opp*100).toFixed(1).replace('.0','')}%)`,
+                    `差引: ${formatSign(net_opp)} 円`
+                ]);
+
+                // 3. Olive Infinite
+                const c_inf = tier === 2 ? 0 : 99000;
+                const pb_inf = u * 100;
+                const pbo_inf = u >= 700 ? 110000 : (u >= 400 ? 40000 : 0);
+                const base_rate_inf = u >= 700 ? 0.04 : (u >= 500 ? 0.03 : (u >= 300 ? 0.02 : 0.01));
+                const rate_inf = base_rate_inf + bonus_opp;
+                const pt_inf = Math.floor(1200000 * rate_inf);
+                const p_inf = pb_inf + pbo_inf + pt_inf;
+                const net_inf = p_inf - c_inf;
+                res.inf.burden.push(-c_inf);
+                res.inf.pt.push(p_inf);
+                res.inf.profit.push(net_inf);
+                res.inf.tooltipText.push([
+                    `負担額: ${c_inf.toLocaleString()} 円`,
+                    `Pt付与: ${p_inf.toLocaleString()} Pt`,
+                    `├ ｼｮｯﾋﾟﾝｸﾞ: ${pb_inf.toLocaleString()}`,
+                    `├ 継続特典: ${pbo_inf.toLocaleString()}`,
+                    `└ 積立還元: ${pt_inf.toLocaleString()} (${(rate_inf*100).toFixed(1).replace('.0','')}%)`,
+                    `差引: ${formatSign(net_inf)} 円`
+                ]);
+            });
+            return res;
+        }
+
+        // --- Chart.js 共通設定 ---
+        Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+        Chart.defaults.color = '#4b5563';
+        const labels = [0, 100, 200, 300, 400, 500, 600, 700];
+
+        const baseOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 20, usePointStyle: true } }
+            },
+            scales: {
+                x: { title: { display: true, text: '年間カード利用額 (万円)' }, grid: { color: '#f3f4f6' } },
+                y: {
+                    title: { display: true, text: '金額 / ポイント数' },
+                    min: -120000, max: 280000,
+                    ticks: { stepSize: 40000, callback: value => value.toLocaleString() },
+                    grid: { color: ctx => ctx.tick.value === 0 ? '#9ca3af' : '#f3f4f6', lineWidth: ctx => ctx.tick.value === 0 ? 2 : 1 }
+                }
+            }
+        };
+
+        // 個別グラフ用ツールチップ設定（代表1つだけ表示＆カラーボックス非表示）
+        const singleTooltip = {
+            padding: 14,
+            displayColors: false,
+            titleFont: { size: 14 },
+            bodyFont: { size: 13, family: 'monospace' },
+            callbacks: {
+                title: function(context) {
+                    return '年間決済: ' + context[0].label + ' 万円';
+                },
+                label: function(context) {
+                    if (context.datasetIndex === 0) {
+                        return context.dataset.customTooltip[context.dataIndex];
+                    }
+                    return null;
+                }
+            }
+        };
+
+        // 比較グラフ用ツールチップ設定（各カードのブロックを表示）
+        const compareTooltip = {
+            padding: 14,
+            titleFont: { size: 14 },
+            bodyFont: { size: 13, family: 'monospace' },
+            callbacks: {
+                title: function(context) {
+                    return '年間決済: ' + context[0].label + ' 万円';
+                },
+                label: function(context) {
+                    const cardName = context.dataset.label.replace(' 損益', '');
+                    const tt = context.dataset.customTooltip[context.dataIndex];
+                    return [`【${cardName}】`, ...tt, ''];
+                }
+            }
+        };
+
+        // --- グラフインスタンスの初期化 ---
+        let charts = {};
+
+        function initCharts() {
+            // Chart 1: PP
+            charts.chart1 = new Chart(document.getElementById('chart1'), {
+                type: 'line',
+                data: { labels: labels, datasets: [] },
+                options: { ...baseOptions, plugins: { ...baseOptions.plugins, tooltip: singleTooltip, title: { display: true, text: '現行非Olive プラチナプリファード', font: { size: 16 } } } }
+            });
+            // Chart 2: Olive PP
+            charts.chart2 = new Chart(document.getElementById('chart2'), {
+                type: 'line',
+                data: { labels: labels, datasets: [] },
+                options: { ...baseOptions, plugins: { ...baseOptions.plugins, tooltip: singleTooltip, title: { display: true, text: 'Olive プラチナプリファード', font: { size: 16 } } } }
+            });
+            // Chart 3: Infinite
+            charts.chart3 = new Chart(document.getElementById('chart3'), {
+                type: 'line',
+                data: { labels: labels, datasets: [] },
+                options: { ...baseOptions, plugins: { ...baseOptions.plugins, tooltip: singleTooltip, title: { display: true, text: 'Olive フレキシブルペイ Visa Infinite', font: { size: 16 } } } }
+            });
+            // Chart 4: Comparison
+            charts.chart4 = new Chart(document.getElementById('chart4'), {
+                type: 'line',
+                data: { labels: labels, datasets: [] },
+                options: { ...baseOptions, plugins: { ...baseOptions.plugins, tooltip: compareTooltip, title: { display: true, text: '【比較】3券種 差し引き損益推移', font: { size: 16, weight: 'bold' } } } }
+            });
+        }
+
+        // --- データの更新と描画 ---
+        function updateAllCharts() {
+            const tier = parseInt(document.getElementById('assetTier').value);
+            const data = calculateData(tier);
+
+            // CUD配色定義 (Okabe-Ito Palette base)
+            // PP: Blue (#0072B2), Sky Blue (#56B4E9), Dark Blue (#004080)
+            // Olive PP: Vermilion (#D55E00), Orange (#E69F00), Dark Brown (#803000)
+            // Infinite: Dark Gray (#4D4D4D), Gray (#999999), Black (#000000)
+
+            // Chart 1 更新
+            charts.chart1.data.datasets = [
+                { label: '負担額 (年会費)', data: data.pp.burden, borderColor: '#56B4E9', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 2, customTooltip: data.pp.tooltipText },
+                { label: 'Pt付与額', data: data.pp.pt, borderColor: '#0072B2', borderWidth: 2, borderDash: [2, 2], fill: false, pointRadius: 2 },
+                { label: '差し引き損益', data: data.pp.profit, borderColor: '#004080', borderWidth: 3.5, fill: false, pointRadius: 5 }
+            ];
+            charts.chart1.update();
+
+            // Chart 2 更新
+            charts.chart2.data.datasets = [
+                { label: '負担額 (年会費)', data: data.opp.burden, borderColor: '#E69F00', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 2, customTooltip: data.opp.tooltipText },
+                { label: 'Pt付与額', data: data.opp.pt, borderColor: '#D55E00', borderWidth: 2, borderDash: [2, 2], fill: false, pointRadius: 2 },
+                { label: '差し引き損益', data: data.opp.profit, borderColor: '#803000', borderWidth: 3.5, fill: false, pointRadius: 5 }
+            ];
+            charts.chart2.update();
+
+            // Chart 3 更新
+            charts.chart3.data.datasets = [
+                { label: '負担額 (年会費)', data: data.inf.burden, borderColor: '#999999', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 2, customTooltip: data.inf.tooltipText },
+                { label: 'Pt付与額', data: data.inf.pt, borderColor: '#4D4D4D', borderWidth: 2, borderDash: [2, 2], fill: false, pointRadius: 2 },
+                { label: '差し引き損益', data: data.inf.profit, borderColor: '#000000', borderWidth: 3.5, fill: false, pointRadius: 5 }
+            ];
+            charts.chart3.update();
+
+            // Chart 4 更新
+            charts.chart4.data.datasets = [
+                { label: 'PP 損益', data: data.pp.profit, borderColor: '#004080', borderWidth: 3.5, fill: false, pointRadius: 5, customTooltip: data.pp.tooltipText },
+                { label: 'Olive PP 損益', data: data.opp.profit, borderColor: '#803000', borderWidth: 3.5, fill: false, pointRadius: 5, customTooltip: data.opp.tooltipText },
+                { label: 'Olive Infinite 損益', data: data.inf.profit, borderColor: '#000000', borderWidth: 3.5, fill: false, pointRadius: 5, customTooltip: data.inf.tooltipText }
+            ];
+            charts.chart4.update();
+        }
+
+        // 初期化実行
+        initCharts();
+        updateAllCharts();
+    </script>
+</body>
+</html>
