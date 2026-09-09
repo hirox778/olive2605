@@ -37,7 +37,10 @@
 
             <p class="text-sm text-gray-600">
                 <strong>積立条件：</strong>クレカ積立 月額10万円（年間120万円）フル活用<br>
-                <span class="text-xs text-gray-500">※本シミュレーションは、2026年5月時点の公式情報を元に作成しています。最新の還元率や条件については、必ず三井住友カードの公式サイトをご確認ください。</span><br>
+                <span class="text-xs text-gray-500">※本シミュレーションは、2026年9月8日に再確認した公式情報を元に作成しています。最新の還元率や条件については、必ず三井住友カードの公式サイトをご確認ください。</span><br>
+                <span class="text-xs text-gray-500">※積立の上乗せ（+1%／+2%）は「資産運用特典」によるもので、<strong>Olive残高の階層で決まりカードランクには依存しません</strong>。別途、Olive資産運用サービスへの申込が必要です。</span><br>
+                <span class="text-xs text-gray-500">※<strong>年間利用額が100万円未満の場合、継続年の年会費が復活します</strong>（Olive PP 33,000円／Olive Infinite 99,000円）。グラフの0〜100万円の区間はこれを反映しています。</span><br>
+                <span class="text-xs text-gray-500">※非Olive プラチナプリファードの積立上乗せは0%として計算しています（資産運用特典の対象か否かが公式に確認できないため）。詳細は<a href="./report.md" class="underline">レポート 1.4</a>を参照。</span><br>
                 <span class="text-xs text-gray-500">※当ツールは個人が作成した非公式のシミュレーターです。</span><br>
                 <span class="text-xs text-gray-500">※計算結果は目安であり、実際の付与ポイントや損益を保証するものではありません。カードの入会や資産運用は自己責任でご判断ください。</span><br>
             </p>
@@ -99,7 +102,8 @@
                 ]);
 
                 // 2. Olive PP
-                const c_opp = tier >= 1 ? 0 : 33000;
+                // 資産条件を満たしても、継続年は年間100万円以上の利用がないと年会費が復活する
+                const c_opp = (tier >= 1 && u >= 100) ? 0 : 33000;
                 const pb_opp = u * 100;
                 const pbo_opp = pbo_pp;
                 const bonus_opp = tier === 2 ? 0.02 : (tier === 1 ? 0.01 : 0);
@@ -120,7 +124,7 @@
                 ]);
 
                 // 3. Olive Infinite
-                const c_inf = tier === 2 ? 0 : 99000;
+                const c_inf = (tier === 2 && u >= 100) ? 0 : 99000;
                 const pb_inf = u * 100;
                 const pbo_inf = u >= 700 ? 110000 : (u >= 400 ? 40000 : 0);
                 const base_rate_inf = u >= 700 ? 0.04 : (u >= 500 ? 0.03 : (u >= 300 ? 0.02 : 0.01));
